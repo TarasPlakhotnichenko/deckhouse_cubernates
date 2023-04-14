@@ -1,0 +1,297 @@
+Установка кластера Kubernates deckhouse https://deckhouse.ru/gs/bm/step2.html
+
+---
+1) 10.20.0.100 (Installer):
+
+sudo usermod -aG docker $USER
+sudo chown root:docker /var/run/docker.sock
+
+
+2) 10.20.0.100 (Installer):
+
+vi /home/kuber/config.yml
+
+config.yml:
+---
+...
+publicDomainTemplate: "%s.demo.stand"
+...
+internalNetworkCIDRs:
+- 10.20.0.0/24
+---
+
+
+3) 10.20.0.100 (Installer):
+docker run --pull=always -it -v "$PWD/config.yml:/config.yml" -v "$HOME/.ssh/:/tmp/.ssh/" registry.deckhouse.io/deckhouse/ce/install:stable bash
+
+4) 10.20.0.100 (Installer):
+ssh-keygen -t rsa  
+ssh-copy-id -i ~/.ssh/id_rsa.pub kuber@10.20.0.10
+
+5)  10.20.0.100 (Installer) -> container interior:
+dhctl bootstrap --ssh-user=kuber --ssh-host=10.20.0.10 --ssh-agent-private-keys=$HOME/.ssh/id_rsa   --config=/config.yml   --ask-become-pass
+
+---
+....
+┌ Waiting for Deckhouse to become Ready
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ No Deckhouse pod found.
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Pending)
+│ │ Deckhouse pod found: deckhouse-7b59f878fd-24r7c (Running)
+│ │ Running pod found! Checking logs...
+│ │ Request failed. Probably pod was restarted during installation.
+│ │ Deckhouse pod found: deckhouse-8cc6b87db-zrsf5 (Running)
+│ │ Running pod found! Checking logs...
+│ │ Request failed. Probably pod was restarted during installation.
+│ │ Deckhouse pod found: deckhouse-76845bc7db-vnrwc (Running)
+│ │ Running pod found! Checking logs...
+│ │ Request failed. Probably pod was restarted during installation.
+│ │ Deckhouse pod found: deckhouse-6586f9dc84-6pmr5 (Running)
+│ │ Running pod found! Checking logs...
+│ │ Deckhouse pod is Ready!
+│ └ Waiting for Deckhouse to become Ready (197.27 seconds)
+└ ⛵ ~ Bootstrap: Install Deckhouse (198.09 seconds)
+
+┌ ⛵ ~ Bootstrap: Clear cache
+│ ❗ ~ Next run of "dhctl bootstrap" will create a new Kubernetes cluster.
+└ ⛵ ~ Bootstrap: Clear cache (0.00 seconds)
+[deckhouse] root@87ef005d2d1a / #
+---
+
+6) As a workaround to" "The connection to the server localhost:8080 was refused - did you specify the right host or port?":
+---
+sudo mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+---
+
+7) 10.20.0.10 (Master-1):
+
+7.a) 
+---
+kuber@master-1:~$ kubectl cluster-info
+Kubernetes control plane is running at https://127.0.0.1:6445
+---
+
+7.b)
+---
+kuber@master-1:~$ kubectl get nodes
+NAME       STATUS   ROLES                  AGE     VERSION
+master-2   Ready    control-plane,master   3h16m   v1.23.16
+---
+
+
+7.c)
+---
+kuber@master-1:~$ kubectl get services
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.222.0.1   <none>        443/TCP   3h21m
+---
+
+
+
+8) 10.20.0.10 (Master-1)
+
+
+
+worker-1.yml
+
+---
+apiVersion: deckhouse.io/v1
+kind: NodeGroup
+metadata:
+  name: worker
+spec:
+  nodeType: Static
+---
+
+
+
+9) 10.20.0.10 (Master-1) 
+
+kuber@master-1:~$ sudo kubectl create -f worker-1.yml
+nodegroup.deckhouse.io/worker created
+
+
+
+
+10) 10.20.0.10 (Master-1) 
+
+a) sudo kubectl -n d8-cloud-instance-manager get secret manual-bootstrap-for-worker -o json | jq '.data."bootstrap.sh"' -r > worker.sh
+b) 
+scp worker.sh kuber@10.20.0.14:/home/kuber/
+scp worker.sh kuber@10.20.0.15:/home/kuber/
+scp worker.sh kuber@10.20.0.16:/home/kuber/
+
+
+11) 10.20.0.14 (Worker-1) 
+
+cat worker.sh | base64 -d | sudo bash
+
+---
+...
+=== Step: /var/lib/bashible/bundle_steps/098_cleanup.sh
+===
+===
+=== Step: /var/lib/bashible/bundle_steps/099_reboot.sh
+===
+Error in configuration:
+* unable to read client-cert /var/lib/kubelet/pki/kubelet-client-current.pem for default-auth due to open /var/lib/kubelet/pki/kubelet-client-current.pem: no such file or directory
+* unable to read client-key /var/lib/kubelet/pki/kubelet-client-current.pem for default-auth due to open /var/lib/kubelet/pki/kubelet-client-current.pem: no such file or directory
+Failed to annotate node worker-1 with annotation node.deckhouse.io/configuration-checksum=1424ee0fd619f6d160da3e5c8dc47a227ff990a751a68ad6e646a19f822a038b ... retry in 10 seconds.
+Error from server (NotFound): nodes "worker-1" not found
+Failed to annotate node worker-1 with annotation node.deckhouse.io/configuration-checksum=1424ee0fd619f6d160da3e5c8dc47a227ff990a751a68ad6e646a19f822a038b ... retry in 10 seconds.
+---
+
+
+12) 10.20.0.10 (Master-1)
+
+
+kuber@master-1:~$ kubectl get nodes
+NAME       STATUS   ROLES                  AGE   VERSION
+master-1   Ready    control-plane,master   14h   v1.23.16
+worker-1   Ready    worker                 27s   v1.23.16
+
+
+
+
+13) 10.20.0.15 (Worker-2):
+
+cat worker.sh | base64 -d | sudo bash 
+
+---
+=== Step: /var/lib/bashible/bundle_steps/100_disable-ntp-on-node.sh
+===
+Error in configuration:
+* unable to read client-cert /var/lib/kubelet/pki/kubelet-client-current.pem for default-auth due to open /var/lib/kubelet/pki/kubelet-client-current.pem: no such file or directory
+* unable to read client-key /var/lib/kubelet/pki/kubelet-client-current.pem for default-auth due to open /var/lib/kubelet/pki/kubelet-client-current.pem: no such file or directory
+Failed to annotate node worker-2 with annotation node.deckhouse.io/configuration-checksum=b634f0bdcb99638f8709a0e8ab9f6ccc089059c13d31574c0f615de34564ee4e ... retry in 10 seconds.
+Error from server (NotFound): nodes "worker-2" not found
+Failed to annotate node worker-2 with annotation node.deckhouse.io/configuration-checksum=b634f0bdcb99638f8709a0e8ab9f6ccc089059c13d31574c0f615de34564ee4e ... retry in 10 seconds.
+kuber@worker-2:~$
+---
+
+14)10.20.0.16 (Worker-3):
+
+cat worker.sh | base64 -d | sudo bash 
+
+---
+...
+=== Step: /var/lib/bashible/bundle_steps/100_disable-ntp-on-node.sh
+===
+Error in configuration:
+* unable to read client-cert /var/lib/kubelet/pki/kubelet-client-current.pem for default-auth due to open /var/lib/kubelet/pki/kubelet-client-current.pem: no such file or directory
+* unable to read client-key /var/lib/kubelet/pki/kubelet-client-current.pem for default-auth due to open /var/lib/kubelet/pki/kubelet-client-current.pem: no such file or directory
+Failed to annotate node worker-3 with annotation node.deckhouse.io/configuration-checksum=b634f0bdcb99638f8709a0e8ab9f6ccc089059c13d31574c0f615de34564ee4e ... retry in 10 seconds.
+Error from server (NotFound): nodes "worker-3" not found
+Failed to annotate node worker-3 with annotation node.deckhouse.io/configuration-checksum=b634f0bdcb99638f8709a0e8ab9f6ccc089059c13d31574c0f615de34564ee4e ... retry in 10 seconds.
+kuber@worker-3:~$
+---
+
+
+
+15) 10.20.0.10 (Master-1); copying worker.sh to Master-2 :
+
+scp worker.sh kuber@10.20.0.11:/home/kuber/
+
+
+16) 10.20.0.10 (Master-1):
+sudo kubectl create -f ingress-nginx-controller.yml
+
+---
+kuber@master-2:~$ sudo kubectl create -f ingress-nginx-controller.yml
+ingressnginxcontroller.deckhouse.io/nginx created
+---
+
+17) 10.20.0.10 (Master-1):
+
+sudo kubectl create -f user.yml
+
+---
+kuber@master-2:~$ sudo kubectl create -f user.yml
+clusterauthorizationrule.deckhouse.io/admin created
+user.deckhouse.io/admin created
+---
+
+
+18) 10.20.0.2 (DNS server) -> Control Panel\System and Security\Administrative Tools :
+
+a) DNS -> Forward Lookup Zones -> demo.stand -> graphana ( Alias(CNAME) ) -> right click -> delete :
+b) DNS -> Forward Lookup Zones -> right click on demo.stand -> Add new host : 
+grafana = 10.20.0.10 (control plane, master-1's IP)
+
+-//-
+dex = 10.20.0.10 (control plane, master-1's IP) 
+
+ 
+19) 10.20.0.10 (Master-1) 
+
+a) sudo kubectl -n d8-cloud-instance-manager get secret manual-bootstrap-for-master -o json | jq '.data."bootstrap.sh"' -r > master.sh
+b) 
+scp master.sh kuber@10.20.0.11:/home/kuber/
+scp master.sh kuber@10.20.0.12:/home/kuber/ 
+ 
+20) 10.20.0.11 (Master-2)
+cat master.sh | base64 -d | sudo bash
+
+
+21) 10.20.0.12 (Master-3)
+cat master.sh | base64 -d | sudo bash
+
+
+22) 10.20.0.10 (Master-1):
+
+
+kuber@master-1:~$ kubectl get nodes
+NAME       STATUS   ROLES                  AGE     VERSION
+master-1   Ready    control-plane,master   23h     v1.23.16
+master-2   Ready    control-plane,master   33m     v1.23.16
+master-3   Ready    control-plane,master   19m     v1.23.16
+worker-1   Ready    worker                 8h      v1.23.16
+worker-2   Ready    worker                 7h57m   v1.23.16
+worker-3   Ready    worker                 7h52m   v1.23.16
+
+
+23) Firefox -> https://grafana.demo.stand
+
+l: admin@deckhouse.io
+p: 5166q33pgh
+
+24) Enjoy & rejoice! :)
+
+
+
+PS Side notice - destroying cluster:
+---
+docker run --pull=always -it -v "$HOME/.ssh/:/root/.ssh/" registry.deckhouse.io/deckhouse/ce/install:stable bash
+ssh-keygen -t rsa
+ssh-copy-id -i ~/.ssh/id_rsa.pub kuber@10.20.0.12
+dhctl destroy --ssh-host=10.20.0.10  --ssh-user=kuber --ask-become-pass
+---
+
+
+
+
+
+
+
+
+
+
